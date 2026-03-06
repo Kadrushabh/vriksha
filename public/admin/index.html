@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vriksha — Admin</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --forest: #2D4A2D; --moss: #5C7A4E; --gold: #A07840;
+  --cream: #F5F0E8; --cream-dark: #EDE5D4;
+  --ink: #1C2B1C; --red: #c0392b; --blue: #2980b9;
+  --sidebar-w: 220px;
+}
+
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+       background: #f0ede8; color: var(--ink); min-height: 100vh; }
+
+/* ── Login Screen ── */
+#login-screen {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 100vh; background: var(--forest);
+}
+.login-box {
+  background: var(--cream); border-radius: 8px; padding: 40px;
+  width: 360px; text-align: center;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+.login-box h1 { font-family: Georgia, serif; font-size: 28px; color: var(--forest);
+                letter-spacing: 0.1em; margin-bottom: 4px; }
+.login-box p  { color: var(--gold); font-size: 11px; letter-spacing: 0.3em;
+                text-transform: uppercase; margin-bottom: 32px; }
+.login-box input {
+  width: 100%; padding: 12px 14px; border: 1px solid #ddd; border-radius: 4px;
+  font-size: 14px; margin-bottom: 12px; background: white; outline: none;
+}
+.login-box input:focus { border-color: var(--forest); }
+.btn-primary {
+  width: 100%; padding: 12px; background: var(--forest); color: var(--cream);
+  border: none; border-radius: 4px; font-size: 14px; cursor: pointer;
+  letter-spacing: 0.05em;
+}
+.btn-primary:hover { background: var(--moss); }
+.login-error { color: var(--red); font-size: 12px; margin-top: 8px; }
+
+/* ── App Shell ── */
+#app { display: none; }
+#app.visible { display: flex; min-height: 100vh; }
+
+/* ── Sidebar ── */
+.sidebar {
+  width: var(--sidebar-w); background: var(--forest); color: var(--cream);
+  display: flex; flex-direction: column; position: fixed; height: 100vh; z-index: 100;
+}
+.sidebar-brand {
+  padding: 28px 20px 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+.sidebar-brand .brand { font-family: Georgia, serif; font-size: 20px; letter-spacing: 0.1em; }
+.sidebar-brand .sub   { font-size: 9px; color: var(--gold); letter-spacing: 0.3em;
+                        text-transform: uppercase; margin-top: 2px; }
+nav { flex: 1; padding: 16px 0; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px; padding: 10px 20px;
+  color: rgba(255,255,255,0.7); cursor: pointer; font-size: 13px;
+  transition: all 0.15s; border-left: 3px solid transparent;
+}
+.nav-item:hover   { color: white; background: rgba(255,255,255,0.07); }
+.nav-item.active  { color: white; border-left-color: var(--gold); background: rgba(255,255,255,0.1); }
+.nav-item .icon   { font-size: 16px; width: 20px; text-align: center; }
+.sidebar-footer {
+  padding: 16px 20px; border-top: 1px solid rgba(255,255,255,0.1);
+}
+.btn-logout {
+  width: 100%; padding: 8px; background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.7);
+  border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; cursor: pointer; font-size: 12px;
+}
+.btn-logout:hover { background: rgba(255,255,255,0.2); color: white; }
+
+/* ── Main Content ── */
+.main { margin-left: var(--sidebar-w); flex: 1; padding: 24px; max-width: 100%; }
+
+.page { display: none; }
+.page.active { display: block; }
+
+.page-title {
+  font-family: Georgia, serif; font-size: 22px; color: var(--forest);
+  margin-bottom: 20px; padding-bottom: 12px;
+  border-bottom: 1px solid var(--cream-dark);
+}
+
+/* ── Stat Cards ── */
+.stats-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px; margin-bottom: 24px;
+}
+.stat-card {
+  background: white; border-radius: 6px; padding: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.stat-card .label { font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
+                    color: var(--gold); margin-bottom: 8px; }
+.stat-card .value { font-family: Georgia, serif; font-size: 28px; color: var(--forest); }
+.stat-card .sub   { font-size: 11px; color: #888; margin-top: 2px; }
+
+/* ── Table ── */
+.table-wrap { background: white; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); overflow: hidden; }
+.table-toolbar {
+  padding: 16px 20px; border-bottom: 1px solid var(--cream-dark);
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.table-toolbar input {
+  padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;
+  outline: none; flex: 1; min-width: 200px;
+}
+.table-toolbar input:focus { border-color: var(--forest); }
+.filter-btn {
+  padding: 7px 14px; border: 1px solid #ddd; border-radius: 4px;
+  font-size: 12px; cursor: pointer; background: white; color: var(--ink);
+}
+.filter-btn.active { background: var(--forest); color: white; border-color: var(--forest); }
+
+table { width: 100%; border-collapse: collapse; }
+th {
+  padding: 10px 16px; text-align: left; font-size: 10px; letter-spacing: 0.15em;
+  text-transform: uppercase; color: var(--gold); background: var(--cream);
+  border-bottom: 1px solid var(--cream-dark);
+}
+td {
+  padding: 12px 16px; font-size: 13px; border-bottom: 1px solid #f5f5f5;
+  vertical-align: middle;
+}
+tr:hover td { background: #fafaf8; }
+tr:last-child td { border-bottom: none; }
+
+.badge {
+  display: inline-block; padding: 3px 10px; border-radius: 12px;
+  font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
+}
+.badge-pending    { background: #FEF3C7; color: #92400E; }
+.badge-confirmed  { background: #D1FAE5; color: #065F46; }
+.badge-processing { background: #DBEAFE; color: #1E40AF; }
+.badge-shipped    { background: #EDE9FE; color: #5B21B6; }
+.badge-delivered  { background: #D1FAE5; color: #065F46; }
+.badge-cancelled  { background: #FEE2E2; color: #991B1B; }
+
+.btn-sm {
+  padding: 5px 12px; font-size: 11px; border-radius: 4px; cursor: pointer;
+  border: 1px solid #ddd; background: white; color: var(--ink);
+}
+.btn-sm:hover { background: var(--cream); }
+.btn-sm.primary { background: var(--forest); color: white; border-color: var(--forest); }
+.btn-sm.danger  { background: var(--red); color: white; border-color: var(--red); }
+
+/* ── Order Detail Modal ── */
+.modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.5); z-index: 200; align-items: flex-start;
+  justify-content: center; padding: 40px 20px; overflow-y: auto;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: white; border-radius: 8px; width: 100%; max-width: 640px;
+  padding: 28px; position: relative;
+}
+.modal-close {
+  position: absolute; top: 16px; right: 16px; background: none; border: none;
+  font-size: 22px; cursor: pointer; color: #888; line-height: 1;
+}
+.modal h2 { font-family: Georgia, serif; font-size: 18px; color: var(--forest); margin-bottom: 20px; }
+
+.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+.detail-block .label { font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase;
+                       color: var(--gold); margin-bottom: 4px; }
+.detail-block .value { font-size: 13px; color: var(--ink); line-height: 1.6; }
+
+.modal-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px;
+                 padding-top: 16px; border-top: 1px solid var(--cream-dark); }
+
+select.status-select {
+  padding: 7px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;
+  outline: none; background: white; color: var(--ink); cursor: pointer;
+}
+select.status-select:focus { border-color: var(--forest); }
+
+/* ── Toast ── */
+.toast {
+  position: fixed; bottom: 24px; right: 24px; background: var(--forest);
+  color: white; padding: 12px 20px; border-radius: 6px; font-size: 13px;
+  z-index: 999; transform: translateY(80px); opacity: 0;
+  transition: all 0.3s; pointer-events: none;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast.error { background: var(--red); }
+
+.loading { text-align: center; padding: 40px; color: #888; }
+.empty   { text-align: center; padding: 40px; color: #aaa; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<!-- ── LOGIN ── -->
+<div id="login-screen">
+  <div class="login-box">
+    <h1>❧ VRIKSHA</h1>
+    <p>Admin Panel</p>
+    <input type="email"    id="login-email" placeholder="Admin email" value="">
+    <input type="password" id="login-pass"  placeholder="Password">
+    <button class="btn-primary" onclick="doLogin()">Sign In</button>
+    <div id="login-error" class="login-error"></div>
+  </div>
+</div>
+
+<!-- ── APP ── -->
+<div id="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand">❧ VRIKSHA</div>
+      <div class="sub">Admin Panel</div>
+    </div>
+    <nav>
+      <div class="nav-item active" data-page="dashboard" onclick="showPage('dashboard', this)">
+        <span class="icon">📊</span> Dashboard
+      </div>
+      <div class="nav-item" data-page="orders" onclick="showPage('orders', this)">
+        <span class="icon">📦</span> All Orders
+      </div>
+      <div class="nav-item" data-page="pending" onclick="showPage('pending', this)">
+        <span class="icon">⏳</span> Pending
+      </div>
+      <div class="nav-item" data-page="shipping" onclick="showPage('shipping', this)">
+        <span class="icon">🚚</span> To Ship
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <button class="btn-logout" onclick="doLogout()">Sign Out</button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+
+    <!-- Dashboard -->
+    <div id="page-dashboard" class="page active">
+      <div class="page-title">Dashboard</div>
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-card"><div class="label">Total Orders</div><div class="value" id="s-total">—</div></div>
+        <div class="stat-card"><div class="label">Pending</div><div class="value" id="s-pending">—</div></div>
+        <div class="stat-card"><div class="label">Today's Orders</div><div class="value" id="s-today">—</div></div>
+        <div class="stat-card"><div class="label">Total Revenue</div><div class="value" id="s-revenue">—</div><div class="sub">all time</div></div>
+        <div class="stat-card"><div class="label">This Month</div><div class="value" id="s-month">—</div></div>
+      </div>
+      <div class="table-wrap">
+        <div class="table-toolbar"><strong style="font-size:13px;color:var(--forest);">Recent Orders</strong></div>
+        <table>
+          <thead><tr><th>Order ID</th><th>Customer</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead>
+          <tbody id="recent-orders-body"><tr><td colspan="5" class="loading">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- All Orders -->
+    <div id="page-orders" class="page">
+      <div class="page-title">All Orders</div>
+      <div class="table-wrap">
+        <div class="table-toolbar">
+          <input type="text" id="search-input" placeholder="Search by order ID, email, phone…" oninput="debounceSearch()">
+          <button class="filter-btn active" onclick="filterOrders('all', this)">All</button>
+          <button class="filter-btn" onclick="filterOrders('pending', this)">Pending</button>
+          <button class="filter-btn" onclick="filterOrders('processing', this)">Processing</button>
+          <button class="filter-btn" onclick="filterOrders('shipped', this)">Shipped</button>
+          <button class="filter-btn" onclick="filterOrders('delivered', this)">Delivered</button>
+        </div>
+        <table>
+          <thead><tr><th>Order ID</th><th>Customer</th><th>Items</th><th>Amount</th><th>Payment</th><th>Status</th><th>Date</th><th></th></tr></thead>
+          <tbody id="orders-body"><tr><td colspan="8" class="loading">Loading…</td></tr></tbody>
+        </table>
+        <div id="orders-pagination" style="padding:16px;text-align:center;font-size:13px;color:#888;"></div>
+      </div>
+    </div>
+
+    <!-- Pending -->
+    <div id="page-pending" class="page">
+      <div class="page-title">Pending Orders</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Order ID</th><th>Customer</th><th>Amount</th><th>Payment</th><th>Date</th><th>Actions</th></tr></thead>
+          <tbody id="pending-body"><tr><td colspan="6" class="loading">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- To Ship -->
+    <div id="page-shipping" class="page">
+      <div class="page-title">Ready to Ship</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Order ID</th><th>Customer</th><th>Pincode</th><th>Shiprocket ID</th><th>AWB</th><th>Actions</th></tr></thead>
+          <tbody id="shipping-body"><tr><td colspan="6" class="loading">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ── Order Detail Modal ── -->
+<div id="order-modal" class="modal-overlay">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">×</button>
+    <h2 id="modal-title">Order Detail</h2>
+    <div id="modal-content"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+// ── Config ───────────────────────────────────────────────────────────
+// Change this to your deployed backend URL
+const API = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://localhost:3000/api/admin'
+  : '/api/admin';
+
+let currentFilter = 'all';
+let currentPage   = 1;
+let searchTimer;
+
+// ── Toast ────────────────────────────────────────────────────────────
+function showToast(msg, isError = false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isError ? ' error' : '');
+  setTimeout(() => t.className = 'toast', 3000);
+}
+
+// ── Auth ─────────────────────────────────────────────────────────────
+async function doLogin() {
+  const email = document.getElementById('login-email').value;
+  const pass  = document.getElementById('login-pass').value;
+  document.getElementById('login-error').textContent = '';
+  try {
+    const res = await fetch(`${API}/login`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: pass })
+    });
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app').classList.add('visible');
+      loadDashboard();
+    } else {
+      document.getElementById('login-error').textContent = 'Invalid credentials';
+    }
+  } catch {
+    document.getElementById('login-error').textContent = 'Could not connect to server';
+  }
+}
+document.getElementById('login-pass').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+async function doLogout() {
+  await fetch(`${API}/logout`, { method: 'POST', credentials: 'include' });
+  location.reload();
+}
+
+// Check if already logged in
+(async () => {
+  try {
+    const res  = await fetch(`${API}/check-auth`, { credentials: 'include' });
+    const data = await res.json();
+    if (data.authenticated) {
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app').classList.add('visible');
+      loadDashboard();
+    }
+  } catch {}
+})();
+
+// ── Navigation ────────────────────────────────────────────────────────
+function showPage(page, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  el.classList.add('active');
+
+  if (page === 'dashboard') loadDashboard();
+  if (page === 'orders')    loadOrders();
+  if (page === 'pending')   loadPending();
+  if (page === 'shipping')  loadShipping();
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────────
+async function loadDashboard() {
+  try {
+    const res  = await fetch(`${API}/dashboard`, { credentials: 'include' });
+    const data = await res.json();
+    document.getElementById('s-total').textContent   = data.totalOrders;
+    document.getElementById('s-pending').textContent = data.pendingOrders;
+    document.getElementById('s-today').textContent   = data.todayOrders;
+    document.getElementById('s-revenue').textContent = '₹' + (data.totalRevenue || 0).toLocaleString('en-IN');
+    document.getElementById('s-month').textContent   = '₹' + (data.monthRevenue  || 0).toLocaleString('en-IN');
+    renderOrderRows('recent-orders-body', data.recentOrders, 'simple');
+  } catch (e) {
+    document.getElementById('recent-orders-body').innerHTML = `<tr><td colspan="5" class="empty">Could not load data</td></tr>`;
+  }
+}
+
+// ── Orders List ───────────────────────────────────────────────────────
+async function loadOrders() {
+  const search = document.getElementById('search-input')?.value || '';
+  document.getElementById('orders-body').innerHTML = `<tr><td colspan="8" class="loading">Loading…</td></tr>`;
+  try {
+    const params = new URLSearchParams({ page: currentPage, limit: 20, status: currentFilter });
+    if (search) params.set('search', search);
+    const res  = await fetch(`${API}/orders?${params}`, { credentials: 'include' });
+    const data = await res.json();
+    renderOrderRows('orders-body', data.orders, 'full');
+    document.getElementById('orders-pagination').textContent =
+      `Showing ${data.orders.length} of ${data.total} orders`;
+  } catch {
+    document.getElementById('orders-body').innerHTML = `<tr><td colspan="8" class="empty">Error loading orders</td></tr>`;
+  }
+}
+
+async function loadPending() {
+  document.getElementById('pending-body').innerHTML = `<tr><td colspan="6" class="loading">Loading…</td></tr>`;
+  const res  = await fetch(`${API}/orders?status=pending&limit=50`, { credentials: 'include' });
+  const data = await res.json();
+  if (!data.orders?.length) {
+    document.getElementById('pending-body').innerHTML = `<tr><td colspan="6" class="empty">No pending orders 🎉</td></tr>`;
+    return;
+  }
+  document.getElementById('pending-body').innerHTML = data.orders.map(o => `
+    <tr>
+      <td><strong>${o.orderId}</strong></td>
+      <td>${o.customer.firstName} ${o.customer.lastName}<br><small style="color:#888">${o.customer.email}</small></td>
+      <td>₹${o.total.toLocaleString('en-IN')}</td>
+      <td><span class="badge badge-${o.paymentMethod}">${o.paymentMethod.toUpperCase()}</span></td>
+      <td>${fmtDate(o.createdAt)}</td>
+      <td>
+        <button class="btn-sm primary" onclick="openOrder('${o.orderId}')">View</button>
+        <button class="btn-sm" onclick="confirmOrder('${o.orderId}')">Confirm</button>
+      </td>
+    </tr>`).join('');
+}
+
+async function loadShipping() {
+  document.getElementById('shipping-body').innerHTML = `<tr><td colspan="6" class="loading">Loading…</td></tr>`;
+  const res  = await fetch(`${API}/orders?status=processing&limit=50`, { credentials: 'include' });
+  const data = await res.json();
+  if (!data.orders?.length) {
+    document.getElementById('shipping-body').innerHTML = `<tr><td colspan="6" class="empty">Nothing to ship right now</td></tr>`;
+    return;
+  }
+  document.getElementById('shipping-body').innerHTML = data.orders.map(o => `
+    <tr>
+      <td><strong>${o.orderId}</strong></td>
+      <td>${o.customer.firstName} ${o.customer.lastName}</td>
+      <td>${o.customer.pincode}</td>
+      <td>${o.shiprocket?.orderId || '<em style="color:#aaa">Not synced</em>'}</td>
+      <td>${o.shiprocket?.awbCode || '<em style="color:#aaa">No AWB</em>'}</td>
+      <td>
+        <button class="btn-sm primary" onclick="openOrder('${o.orderId}')">View</button>
+        ${!o.shiprocket?.orderId ? `<button class="btn-sm" onclick="syncShiprocket('${o.orderId}')">Sync SR</button>` : ''}
+        ${o.shiprocket?.trackingUrl ? `<a href="${o.shiprocket.trackingUrl}" target="_blank" class="btn-sm">Track</a>` : ''}
+      </td>
+    </tr>`).join('');
+}
+
+// ── Render helpers ────────────────────────────────────────────────────
+function renderOrderRows(tbodyId, orders, mode) {
+  if (!orders?.length) {
+    document.getElementById(tbodyId).innerHTML = `<tr><td colspan="8" class="empty">No orders found</td></tr>`;
+    return;
+  }
+  document.getElementById(tbodyId).innerHTML = orders.map(o => {
+    if (mode === 'simple') return `
+      <tr>
+        <td><a href="#" onclick="openOrder('${o.orderId}');return false;">${o.orderId}</a></td>
+        <td>${o.customer.firstName} ${o.customer.lastName}</td>
+        <td>₹${o.total.toLocaleString('en-IN')}</td>
+        <td><span class="badge badge-${o.orderStatus}">${o.orderStatus}</span></td>
+        <td>${fmtDate(o.createdAt)}</td>
+      </tr>`;
+    return `
+      <tr>
+        <td><strong>${o.orderId}</strong></td>
+        <td>${o.customer.firstName} ${o.customer.lastName}<br><small style="color:#888">${o.customer.email}</small></td>
+        <td>${o.items.length} item(s)</td>
+        <td>₹${o.total.toLocaleString('en-IN')}</td>
+        <td><span class="badge badge-${o.paymentMethod}">${o.paymentMethod.toUpperCase()}</span></td>
+        <td><span class="badge badge-${o.orderStatus}">${o.orderStatus}</span></td>
+        <td>${fmtDate(o.createdAt)}</td>
+        <td><button class="btn-sm primary" onclick="openOrder('${o.orderId}')">View</button></td>
+      </tr>`;
+  }).join('');
+}
+
+// ── Filters ───────────────────────────────────────────────────────────
+function filterOrders(status, btn) {
+  currentFilter = status; currentPage = 1;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadOrders();
+}
+function debounceSearch() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { currentPage = 1; loadOrders(); }, 400);
+}
+
+// ── Order Detail Modal ────────────────────────────────────────────────
+async function openOrder(orderId) {
+  document.getElementById('modal-content').innerHTML = '<div class="loading">Loading…</div>';
+  document.getElementById('order-modal').classList.add('open');
+  document.getElementById('modal-title').textContent = `Order: ${orderId}`;
+
+  const res  = await fetch(`${API}/orders/${orderId}`, { credentials: 'include' });
+  const o    = await res.json();
+
+  const itemsHTML = o.items.map(i =>
+    `<tr><td>${i.name}</td><td style="text-align:center">${i.quantity}</td><td style="text-align:right">₹${i.totalPrice}</td></tr>`
+  ).join('');
+
+  document.getElementById('modal-content').innerHTML = `
+    <div class="detail-grid">
+      <div class="detail-block"><div class="label">Customer</div>
+        <div class="value">${o.customer.firstName} ${o.customer.lastName}<br>${o.customer.email}<br>${o.customer.phone}</div>
+      </div>
+      <div class="detail-block"><div class="label">Delivery Address</div>
+        <div class="value">${o.customer.address}<br>${o.customer.city}, ${o.customer.state}<br>${o.customer.pincode}</div>
+      </div>
+      <div class="detail-block"><div class="label">Payment</div>
+        <div class="value">${o.paymentMethod.toUpperCase()} — ${o.paymentStatus}<br>
+        ${o.razorpayPaymentId ? `Razorpay: ${o.razorpayPaymentId}` : ''}</div>
+      </div>
+      <div class="detail-block"><div class="label">Shipping</div>
+        <div class="value">SR Order: ${o.shiprocket?.orderId || '—'}<br>AWB: ${o.shiprocket?.awbCode || '—'}<br>
+        ${o.shiprocket?.trackingUrl ? `<a href="${o.shiprocket.trackingUrl}" target="_blank">Track →</a>` : ''}</div>
+      </div>
+    </div>
+
+    <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
+      <thead><tr>
+        <th style="text-align:left;font-size:10px;letter-spacing:0.15em;color:var(--gold);text-transform:uppercase;padding:6px 0;border-bottom:1px solid var(--cream-dark);">Item</th>
+        <th style="text-align:center;font-size:10px;letter-spacing:0.15em;color:var(--gold);text-transform:uppercase;padding:6px 0;border-bottom:1px solid var(--cream-dark);">Qty</th>
+        <th style="text-align:right;font-size:10px;letter-spacing:0.15em;color:var(--gold);text-transform:uppercase;padding:6px 0;border-bottom:1px solid var(--cream-dark);">Price</th>
+      </tr></thead>
+      <tbody style="font-size:13px;">${itemsHTML}</tbody>
+    </table>
+
+    <div style="display:flex;justify-content:flex-end;flex-direction:column;align-items:flex-end;gap:4px;font-size:13px;margin-bottom:20px;">
+      ${o.discount > 0 ? `<div>Discount: −₹${o.discount}</div>` : ''}
+      <div>Shipping: ${o.shippingCharge ? '₹'+o.shippingCharge : 'Free'}</div>
+      <div style="font-family:Georgia,serif;font-size:17px;color:var(--forest);"><strong>Total: ₹${o.total.toLocaleString('en-IN')}</strong></div>
+    </div>
+
+    <div class="modal-actions">
+      <div>
+        <label style="font-size:11px;color:var(--gold);letter-spacing:0.15em;text-transform:uppercase;display:block;margin-bottom:4px;">Update Status</label>
+        <select class="status-select" id="modal-status-select">
+          ${['pending','confirmed','processing','shipped','delivered','cancelled'].map(s =>
+            `<option value="${s}" ${o.orderStatus===s?'selected':''}>${s.charAt(0).toUpperCase()+s.slice(1)}</option>`
+          ).join('')}
+        </select>
+      </div>
+      <button class="btn-sm primary" onclick="updateStatus('${o.orderId}')">Save Status</button>
+      ${!o.shiprocket?.orderId ? `<button class="btn-sm" onclick="syncShiprocket('${o.orderId}')">Push to Shiprocket</button>` : ''}
+      <button class="btn-sm danger" onclick="cancelOrder('${o.orderId}')">Cancel Order</button>
+    </div>`;
+}
+
+function closeModal() {
+  document.getElementById('order-modal').classList.remove('open');
+}
+document.getElementById('order-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('order-modal')) closeModal();
+});
+
+// ── Actions ───────────────────────────────────────────────────────────
+async function updateStatus(orderId) {
+  const status = document.getElementById('modal-status-select').value;
+  const res  = await fetch(`${API}/orders/${orderId}/status`, {
+    method: 'PATCH', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status })
+  });
+  const data = await res.json();
+  if (data.success) { showToast('Status updated'); closeModal(); loadOrders(); }
+  else showToast('Update failed', true);
+}
+
+async function confirmOrder(orderId) {
+  const res  = await fetch(`${API}/orders/${orderId}/status`, {
+    method: 'PATCH', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'confirmed' })
+  });
+  const data = await res.json();
+  if (data.success) { showToast('Order confirmed'); loadPending(); }
+  else showToast('Failed', true);
+}
+
+async function syncShiprocket(orderId) {
+  showToast('Syncing with Shiprocket…');
+  const res  = await fetch(`${API}/orders/${orderId}/shiprocket-sync`, {
+    method: 'POST', credentials: 'include'
+  });
+  const data = await res.json();
+  if (data.success) { showToast('Synced! SR Order ID: ' + data.shiprocket.orderId); closeModal(); }
+  else showToast('Shiprocket sync failed: ' + data.error, true);
+}
+
+async function cancelOrder(orderId) {
+  if (!confirm(`Cancel order ${orderId}? This cannot be undone.`)) return;
+  const res  = await fetch(`${API}/orders/${orderId}/cancel`, {
+    method: 'POST', credentials: 'include'
+  });
+  const data = await res.json();
+  if (data.success) { showToast('Order cancelled'); closeModal(); loadOrders(); }
+  else showToast('Cancel failed', true);
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────
+function fmtDate(d) {
+  return new Date(d).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+}
+</script>
+</body>
+</html>
