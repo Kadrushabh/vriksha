@@ -59,7 +59,7 @@ router.post('/initiate', async (req, res) => {
     });
 
   } catch (err) {
-    console.error('Razorpay initiate error:', err?.error || err.message);
+    console.error('Razorpay initiate error:', JSON.stringify(err?.error || err?.response?.data || err.message));
     res.status(500).json({ error: 'Payment initiation failed. Please try again.' });
   }
 });
