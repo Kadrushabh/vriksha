@@ -15,7 +15,7 @@ const adminRoutes   = require('./routes/admin');
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
-app.set('trust proxy', 1);   // ✅ ADD THIS LINE
+app.set('trust proxy', 1);
 
 // ── CORS — must be FIRST before everything else ───────────────────────
 const corsOptions = {
@@ -25,8 +25,6 @@ const corsOptions = {
   credentials: true
 };
 app.use(cors(corsOptions));
-
-// Handle preflight OPTIONS requests explicitly
 app.options('*', cors(corsOptions));
 
 // ── Security ──────────────────────────────────────────────────────────
@@ -97,6 +95,23 @@ mongoose.connect(process.env.MONGODB_URI)
       console.log(`✅  Vriksha backend running on port ${PORT}`);
       console.log(`🌿  Admin panel: http://localhost:${PORT}/admin`);
       console.log(`💚  Health check: http://localhost:${PORT}/health`);
+
+      // ── Keep-alive: prevent Railway free-tier from sleeping ─────────
+      // Pings /health every 10 minutes so the server stays warm.
+      // Without this, Railway sleeps after ~5 min and takes 10-15s to
+      // wake up — causing "Failed to fetch" on the first payment attempt.
+      const SELF_URL = process.env.RAILWAY_PUBLIC_DOMAIN
+        ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+        : `https://vriksha-production.up.railway.app`;
+
+      setInterval(() => {
+        fetch(SELF_URL + '/health')
+          .then(r => r.json())
+          .then(() => console.log('🏓 Keep-alive ping sent'))
+          .catch(err => console.warn('⚠️  Keep-alive ping failed:', err.message));
+      }, 10 * 60 * 1000); // every 10 minutes
+
+      console.log(`🏓  Keep-alive active → pinging ${SELF_URL}/health every 10 min`);
     });
   })
   .catch(err => {
