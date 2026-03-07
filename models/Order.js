@@ -42,9 +42,9 @@ const orderSchema = new mongoose.Schema({
     type: String, enum: ['pending', 'completed', 'failed', 'refunded'], default: 'pending'
   },
 
-  // Stores PhonePe transaction ID
-  phonepeTransactionId: { type: String },
-  phonepePaymentId:     { type: String },
+  // ── Razorpay fields (THE FIX — these were missing) ──────────────────
+  razorpayOrderId:   { type: String, index: true },
+  razorpayPaymentId: { type: String },
 
   orderStatus: {
     type: String,
@@ -75,6 +75,6 @@ orderSchema.index({ orderId: 1 });
 orderSchema.index({ 'customer.email': 1 });
 orderSchema.index({ orderStatus: 1 });
 orderSchema.index({ createdAt: -1 });
-orderSchema.index({ phonepeTransactionId: 1 });
+orderSchema.index({ razorpayOrderId: 1 });
 
 module.exports = mongoose.model('Order', orderSchema);
