@@ -15,14 +15,20 @@ const adminRoutes   = require('./routes/admin');
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
-// ── Security ──────────────────────────────────────────────────────────
-app.use(helmet({ contentSecurityPolicy: false }));
-app.use(cors({
+// ── CORS — must be FIRST before everything else ───────────────────────
+const corsOptions = {
   origin: ['https://vriksha.store', 'https://www.vriksha.store', 'http://localhost:3000'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
-}));
+};
+app.use(cors(corsOptions));
+
+// Handle preflight OPTIONS requests explicitly
+app.options('*', cors(corsOptions));
+
+// ── Security ──────────────────────────────────────────────────────────
+app.use(helmet({ contentSecurityPolicy: false }));
 
 app.use(rateLimit({
   windowMs: 15 * 60 * 1000,
