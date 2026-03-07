@@ -1,158 +1,101 @@
-<!-- 
-  ════════════════════════════════════════════════════════
-  VRIKSHA — Checkout Integration for your HTML website
-  
-  PASTE THIS into your checkout.html page
-  ════════════════════════════════════════════════════════
+<!--
+  ════════════════════════════════════════════════════
+  VRIKSHA — Checkout Integration
+  Paste the <script> block into your checkout.html
+  ════════════════════════════════════════════════════
 -->
 
-<!-- Step 1: Add Razorpay script in <head> -->
-<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
-
-<!-- Step 2: Paste this <script> block before </body> -->
 <script>
-// ── CONFIG — update this URL after you deploy your backend ──
-const BACKEND_URL = 'https://your-backend.railway.app';  // ← CHANGE THIS
+// ── UPDATE THIS after Railway deployment ──────────
+const BACKEND_URL = 'https://your-railway-url.railway.app';
 
-// ── Cart state (connect to your existing cart logic) ─────────
-// This example reads from localStorage — adapt to your site
+// ── Cart helpers — adapt to your existing cart ────
 function getCart() {
   return JSON.parse(localStorage.getItem('vriksha_cart') || '[]');
 }
 function getCartTotal() {
-  return getCart().reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  return getCart().reduce((sum, i) => sum + (i.price * i.quantity), 0);
 }
 
-// ── Get form values ────────────────────────────────────────────
-function getCustomerDetails() {
+// ── Read checkout form ────────────────────────────
+function getCustomer() {
   return {
-    firstName:  document.getElementById('first-name')?.value?.trim(),
-    lastName:   document.getElementById('last-name')?.value?.trim(),
-    email:      document.getElementById('email')?.value?.trim(),
-    phone:      document.getElementById('phone')?.value?.trim(),
-    address:    document.getElementById('address')?.value?.trim(),
-    city:       document.getElementById('city')?.value?.trim(),
-    state:      document.getElementById('state')?.value?.trim(),
-    pincode:    document.getElementById('pincode')?.value?.trim()
+    firstName: document.getElementById('first-name')?.value?.trim(),
+    lastName:  document.getElementById('last-name')?.value?.trim(),
+    email:     document.getElementById('email')?.value?.trim(),
+    phone:     document.getElementById('phone')?.value?.trim(),
+    address:   document.getElementById('address')?.value?.trim(),
+    city:      document.getElementById('city')?.value?.trim(),
+    state:     document.getElementById('state')?.value?.trim(),
+    pincode:   document.getElementById('pincode')?.value?.trim()
   };
 }
 
-// ── Validate form ─────────────────────────────────────────────
-function validateForm(customer) {
-  const required = ['firstName','lastName','email','phone','address','city','state','pincode'];
-  for (const field of required) {
-    if (!customer[field]) {
-      alert(`Please fill in: ${field.replace(/([A-Z])/g, ' $1').toLowerCase()}`);
-      return false;
-    }
+function validate(c) {
+  const fields = ['firstName','lastName','email','phone','address','city','state','pincode'];
+  for (const f of fields) {
+    if (!c[f]) { alert(`Please fill: ${f.replace(/([A-Z])/g,' $1').toLowerCase()}`); return false; }
   }
-  if (!/^\d{10}$/.test(customer.phone))     { alert('Enter a valid 10-digit phone number'); return false; }
-  if (!/^\d{6}$/.test(customer.pincode))    { alert('Enter a valid 6-digit pincode'); return false; }
-  if (!/\S+@\S+\.\S+/.test(customer.email)){ alert('Enter a valid email address'); return false; }
-  if (getCart().length === 0)                { alert('Your cart is empty'); return false; }
+  if (!/^\d{10}$/.test(c.phone))      { alert('Enter valid 10-digit phone'); return false; }
+  if (!/^\d{6}$/.test(c.pincode))     { alert('Enter valid 6-digit pincode'); return false; }
+  if (!/\S+@\S+\.\S+/.test(c.email)) { alert('Enter valid email'); return false; }
+  if (!getCart().length)               { alert('Cart is empty'); return false; }
   return true;
 }
 
-// ── MAIN: Place Order ─────────────────────────────────────────
+// ── PhonePe Payment ───────────────────────────────
 async function placeOrder() {
-  const customer   = getCustomerDetails();
-  if (!validateForm(customer)) return;
+  const customer = getCustomer();
+  if (!validate(customer)) return;
 
-  const cart       = getCart();
-  const subtotal   = getCartTotal();
-  const shipping   = subtotal >= 499 ? 0 : 60;  // Free shipping above ₹499
-  const total      = subtotal + shipping;
+  const cart     = getCart();
+  const subtotal = getCartTotal();
+  const shipping = subtotal >= 499 ? 0 : 60;
+  const total    = subtotal + shipping;
 
-  const cartItems = cart.map(item => ({
-    productId:  item.id,
-    name:       item.name,
-    sku:        item.sku || item.id,
-    quantity:   item.quantity,
-    price:      item.price,
-    totalPrice: item.price * item.quantity
-  }));
-
-  // Disable button to prevent double-click
   const btn = document.getElementById('pay-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Processing…'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Redirecting to PhonePe…'; }
 
   try {
-    // 1. Create Razorpay order on backend
-    const res = await fetch(`${BACKEND_URL}/api/payment/create-order`, {
+    const res = await fetch(`${BACKEND_URL}/api/payment/initiate`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ amount: total, subtotal, shippingCharge: shipping, discount: 0, customer, cartItems })
+      body: JSON.stringify({
+        total, subtotal,
+        shippingCharge: shipping,
+        discount: 0,
+        customer,
+        cartItems: cart.map(i => ({
+          productId:  i.id,
+          name:       i.name,
+          sku:        i.sku || i.id,
+          quantity:   i.quantity,
+          price:      i.price,
+          totalPrice: i.price * i.quantity
+        }))
+      })
     });
+
     const data = await res.json();
-    if (!data.success) throw new Error(data.error || 'Could not create order');
 
-    // 2. Open Razorpay Checkout
-    const rzp = new Razorpay({
-      key:         data.key_id,
-      amount:      data.amount,
-      currency:    data.currency,
-      order_id:    data.razorpay_order_id,
-      name:        'VRIKSHA',
-      description: `${cart.length} item(s)`,
-      image:       'https://vriksha.in/assets/logo.png',  // ← update path
-      prefill: {
-        name:    customer.firstName + ' ' + customer.lastName,
-        email:   customer.email,
-        contact: customer.phone
-      },
-      theme: { color: '#2D4A2D' },
-
-      handler: async function(response) {
-        // 3. Verify payment on backend
-        const verifyRes = await fetch(`${BACKEND_URL}/api/payment/verify`, {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            razorpay_order_id:  response.razorpay_order_id,
-            razorpay_payment_id: response.razorpay_payment_id,
-            razorpay_signature:  response.razorpay_signature
-          })
-        });
-        const verifyData = await verifyRes.json();
-
-        if (verifyData.success) {
-          // Clear cart & redirect to success page
-          localStorage.removeItem('vriksha_cart');
-          window.location.href = `/order-confirmed.html?order=${verifyData.orderId}`;
-        } else {
-          alert('Payment verification failed. Please contact support.');
-          resetBtn();
-        }
-      },
-
-      modal: {
-        ondismiss: function() { resetBtn(); }
-      }
-    });
-
-    rzp.on('payment.failed', function(response) {
-      alert('Payment failed: ' + (response.error?.description || 'Unknown error'));
-      resetBtn();
-    });
-
-    rzp.open();
+    if (data.success && data.redirectUrl) {
+      localStorage.removeItem('vriksha_cart');
+      window.location.href = data.redirectUrl;  // → PhonePe payment page
+    } else {
+      alert('Error: ' + (data.error || 'Could not initiate payment'));
+      if (btn) { btn.disabled = false; btn.textContent = 'Pay with PhonePe'; }
+    }
 
   } catch (err) {
-    alert('Error: ' + err.message);
-    resetBtn();
-  }
-
-  function resetBtn() {
-    if (btn) { btn.disabled = false; btn.textContent = 'Pay Now'; }
+    alert('Connection error. Please try again.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Pay with PhonePe'; }
   }
 }
 
-// ── COD Order ────────────────────────────────────────────────
+// ── Cash on Delivery ──────────────────────────────
 async function placeCODOrder() {
-  const customer = getCustomerDetails();
-  if (!validateForm(customer)) return;
+  const customer = getCustomer();
+  if (!validate(customer)) return;
 
   const cart     = getCart();
   const subtotal = getCartTotal();
@@ -166,67 +109,63 @@ async function placeCODOrder() {
     const res = await fetch(`${BACKEND_URL}/api/payment/cod-order`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify({
-        customer, subtotal, shippingCharge: shipping, discount: 0, total,
+        customer, subtotal,
+        shippingCharge: shipping,
+        discount: 0, total,
         cartItems: cart.map(i => ({
           productId: i.id, name: i.name, sku: i.sku || i.id,
-          quantity: i.quantity, price: i.price, totalPrice: i.price * i.quantity
+          quantity: i.quantity, price: i.price,
+          totalPrice: i.price * i.quantity
         }))
       })
     });
     const data = await res.json();
     if (data.success) {
-      localStorage.removeItem('vriksha_cart');
       window.location.href = `/order-confirmed.html?order=${data.orderId}`;
     } else {
       alert('Error: ' + (data.error || 'Could not place order'));
+      if (btn) { btn.disabled = false; btn.textContent = 'Cash on Delivery'; }
     }
   } catch (err) {
     alert('Error: ' + err.message);
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Place COD Order'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Cash on Delivery'; }
   }
 }
 
-// ── Auto-check delivery serviceability ───────────────────────
+// ── Pincode delivery check ────────────────────────
 let pinTimer;
 document.getElementById('pincode')?.addEventListener('input', function() {
   clearTimeout(pinTimer);
-  const pin = this.value;
-  if (pin.length !== 6) return;
+  if (this.value.length !== 6) return;
   pinTimer = setTimeout(async () => {
     const el = document.getElementById('delivery-info');
     if (!el) return;
     try {
-      const res  = await fetch(`${BACKEND_URL}/api/payment/check-serviceability?pincode=${pin}`);
+      const res  = await fetch(`${BACKEND_URL}/api/payment/check-serviceability?pincode=${this.value}`);
       const data = await res.json();
       el.textContent = data.serviceable
-        ? `✅ Delivery available in ${data.estimatedDays} days`
+        ? `✅ Delivery in ~${data.estimatedDays} days · ${data.cheapestRate === 0 ? 'Free shipping' : '₹'+data.cheapestRate}`
         : '❌ Delivery not available to this pincode';
       el.style.color = data.serviceable ? '#2D4A2D' : '#c0392b';
-    } catch {
-      el.textContent = '';
-    }
+    } catch { el.textContent = ''; }
   }, 600);
 });
 </script>
 
 <!--
-  ── Your checkout form HTML (example structure) ───────────────
+  ── Form HTML (paste in your checkout.html) ───────
 
-  <form onsubmit="event.preventDefault()">
-    <input id="first-name" placeholder="First Name" required>
-    <input id="last-name"  placeholder="Last Name"  required>
-    <input id="email"      placeholder="Email"       type="email" required>
-    <input id="phone"      placeholder="Phone"       type="tel" required>
-    <input id="address"    placeholder="Address"     required>
-    <input id="city"       placeholder="City"        required>
-    <input id="state"      placeholder="State"       required>
-    <input id="pincode"    placeholder="PIN Code"    maxlength="6" required>
-    <div id="delivery-info" style="font-size:12px;margin-top:4px;"></div>
+  <input id="first-name" placeholder="First Name"   required>
+  <input id="last-name"  placeholder="Last Name"    required>
+  <input id="email"      placeholder="Email"        type="email" required>
+  <input id="phone"      placeholder="Phone"        type="tel" maxlength="10" required>
+  <input id="address"    placeholder="Full Address" required>
+  <input id="city"       placeholder="City"         required>
+  <input id="state"      placeholder="State"        required>
+  <input id="pincode"    placeholder="PIN Code"     maxlength="6" required>
+  <div id="delivery-info" style="font-size:12px;margin-top:4px;"></div>
 
-    <button id="pay-btn" onclick="placeOrder()">Pay Now</button>
-    <button id="cod-btn" onclick="placeCODOrder()">Cash on Delivery</button>
-  </form>
+  <button id="pay-btn" onclick="placeOrder()">Pay with PhonePe</button>
+  <button id="cod-btn" onclick="placeCODOrder()">Cash on Delivery</button>
 -->

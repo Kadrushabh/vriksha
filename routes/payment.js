@@ -1,173 +1,233 @@
-// routes/payment.js  —  Razorpay integration
+// routes/payment.js — PhonePe Payment Gateway
 const express  = require('express');
-const Razorpay = require('razorpay');
 const crypto   = require('crypto');
+const axios    = require('axios');
 const Order    = require('../models/Order');
 const shiprocket = require('../config/shiprocket');
-const { sendOrderConfirmation } = require('../config/mailer');
 
 const router = express.Router();
 
-const razorpay = new Razorpay({
-  key_id:     process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET
-});
+const MERCHANT_ID = process.env.PHONEPE_MERCHANT_ID;
+const SALT_KEY    = process.env.PHONEPE_SALT_KEY;
+const SALT_INDEX  = process.env.PHONEPE_SALT_INDEX || '1';
+const IS_PROD     = process.env.NODE_ENV === 'production';
 
-// ── POST /api/payment/create-order ────────────────────────────────────
-// Called by frontend when customer clicks "Pay Now"
-router.post('/create-order', async (req, res) => {
+const PAY_URL    = IS_PROD
+  ? 'https://api.phonepe.com/apis/hermes/pg/v1/pay'
+  : 'https://api-preprod.phonepe.com/apis/pg-sandbox/pg/v1/pay';
+
+const STATUS_URL = IS_PROD
+  ? 'https://api.phonepe.com/apis/hermes/pg/v1/status'
+  : 'https://api-preprod.phonepe.com/apis/pg-sandbox/pg/v1/status';
+
+// PhonePe checksum for payment initiation
+function makePayChecksum(payloadBase64) {
+  const hash = crypto.createHash('sha256')
+    .update(payloadBase64 + '/pg/v1/pay' + SALT_KEY)
+    .digest('hex');
+  return `${hash}###${SALT_INDEX}`;
+}
+
+// PhonePe checksum for status check
+function makeStatusChecksum(txnId) {
+  const endpoint = `/pg/v1/status/${MERCHANT_ID}/${txnId}`;
+  const hash = crypto.createHash('sha256')
+    .update(endpoint + SALT_KEY)
+    .digest('hex');
+  return `${hash}###${SALT_INDEX}`;
+}
+
+// ── POST /api/payment/initiate ────────────────────────────────────────
+router.post('/initiate', async (req, res) => {
   try {
-    const { amount, currency = 'INR', cartItems, customer, couponCode } = req.body;
+    const { cartItems, customer, subtotal, shippingCharge, discount, total, couponCode } = req.body;
 
-    // Basic validation
-    if (!amount || amount < 1) return res.status(400).json({ error: 'Invalid amount' });
-    if (!customer?.email || !customer?.phone) return res.status(400).json({ error: 'Customer details required' });
+    if (!total || total < 1)  return res.status(400).json({ error: 'Invalid amount' });
+    if (!customer?.email)     return res.status(400).json({ error: 'Customer details required' });
+    if (!cartItems?.length)   return res.status(400).json({ error: 'Cart is empty' });
 
-    // Create Razorpay order
-    const rzpOrder = await razorpay.orders.create({
-      amount:   Math.round(amount * 100),  // paise
-      currency,
-      receipt:  `VRK_${Date.now()}`,
-      notes:    { email: customer.email, phone: customer.phone }
-    });
-
-    // Pre-create order in DB with pending status
+    // Save order
     const order = new Order({
-      customer,
-      items:          cartItems,
-      subtotal:       req.body.subtotal,
-      shippingCharge: req.body.shippingCharge || 0,
-      discount:       req.body.discount       || 0,
-      total:          amount,
-      couponCode,
-      paymentMethod:  'prepaid',
-      paymentStatus:  'pending',
-      razorpayOrderId: rzpOrder.id
+      customer, items: cartItems, subtotal,
+      shippingCharge: shippingCharge || 0,
+      discount: discount || 0, total, couponCode,
+      paymentMethod: 'prepaid',
+      paymentStatus: 'pending',
+      orderStatus:   'pending'
     });
     await order.save();
 
-    res.json({
-      success:        true,
-      razorpay_order_id: rzpOrder.id,
-      amount:         rzpOrder.amount,
-      currency:       rzpOrder.currency,
-      internal_order_id: order.orderId,
-      key_id:         process.env.RAZORPAY_KEY_ID
-    });
+    // Transaction ID — alphanumeric only, max 38 chars
+    const txnId = `VRK${Date.now()}`.slice(0, 38);
+    order.phonepeTransactionId = txnId;
+    await order.save();
+
+    // PhonePe payload
+    const payload = {
+      merchantId:            MERCHANT_ID,
+      merchantTransactionId: txnId,
+      merchantUserId:        `MUID${customer.phone}`,
+      name:                  `${customer.firstName} ${customer.lastName}`,
+      amount:                Math.round(total * 100),
+      redirectUrl:           `${process.env.BACKEND_URL}/api/payment/callback`,
+      redirectMode:          'POST',
+      mobileNumber:          String(customer.phone),
+      paymentInstrument:     { type: 'PAY_PAGE' }
+    };
+
+    const payloadBase64 = Buffer.from(JSON.stringify(payload)).toString('base64');
+    const checksum      = makePayChecksum(payloadBase64);
+
+    const response = await axios.post(
+      PAY_URL,
+      { request: payloadBase64 },
+      { headers: { 'Content-Type': 'application/json', 'X-VERIFY': checksum } }
+    );
+
+    const redirectUrl = response.data?.data?.instrumentResponse?.redirectInfo?.url;
+    if (!redirectUrl) throw new Error('No redirect URL from PhonePe');
+
+    res.json({ success: true, redirectUrl, orderId: order.orderId, txnId });
 
   } catch (err) {
-    console.error('Create order error:', err);
-    res.status(500).json({ error: 'Could not create order. Please try again.' });
+    console.error('PhonePe initiate error:', err?.response?.data || err.message);
+    res.status(500).json({ error: 'Payment initiation failed. Please try again.' });
   }
 });
 
-// ── POST /api/payment/verify ──────────────────────────────────────────
-// Called by frontend after Razorpay payment completes
-router.post('/verify', async (req, res) => {
+// ── POST /api/payment/callback ────────────────────────────────────────
+// PhonePe redirects customer here after payment
+router.post('/callback', async (req, res) => {
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+    // Decode PhonePe response
+    const { response: encodedResponse } = req.body;
+    let txnId;
 
-    // 1. Verify Razorpay signature — CRITICAL security step
-    const expectedSig = crypto
-      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
-      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-      .digest('hex');
-
-    if (expectedSig !== razorpay_signature) {
-      return res.status(400).json({ success: false, error: 'Payment verification failed' });
+    if (encodedResponse) {
+      const decoded = JSON.parse(Buffer.from(encodedResponse, 'base64').toString('utf8'));
+      txnId = decoded?.data?.merchantTransactionId;
     }
 
-    // 2. Find & update order
-    const order = await Order.findOne({ razorpayOrderId: razorpay_order_id });
-    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (!txnId) return res.redirect(`${process.env.FRONTEND_URL}/payment-failed.html`);
 
-    order.paymentStatus    = 'completed';
-    order.orderStatus      = 'confirmed';
-    order.razorpayPaymentId = razorpay_payment_id;
-    await order.save();
+    // Verify with PhonePe status API
+    const checksum  = makeStatusChecksum(txnId);
+    const statusRes = await axios.get(
+      `${STATUS_URL}/${MERCHANT_ID}/${txnId}`,
+      {
+        headers: {
+          'Content-Type':  'application/json',
+          'X-VERIFY':      checksum,
+          'X-MERCHANT-ID': MERCHANT_ID
+        }
+      }
+    );
 
-    // 3. Create Shiprocket order (async — don't block response)
-    shiprocket.createOrder(order).then(async (srRes) => {
-      order.shiprocket = {
-        orderId:    srRes.order_id,
-        shipmentId: srRes.shipment_id,
-        status:     srRes.status
-      };
-      order.orderStatus = 'processing';
+    const data      = statusRes.data;
+    const isSuccess = data?.success === true || data?.code === 'PAYMENT_SUCCESS';
+
+    const order = await Order.findOne({ phonepeTransactionId: txnId });
+    if (!order) return res.redirect(`${process.env.FRONTEND_URL}/payment-failed.html`);
+
+    if (isSuccess) {
+      order.paymentStatus    = 'completed';
+      order.orderStatus      = 'confirmed';
+      order.phonepePaymentId = data?.data?.transactionId || txnId;
       await order.save();
-    }).catch(err => console.error('Shiprocket create failed:', err.message));
 
-    // 4. Send confirmation email (async)
-    sendOrderConfirmation(order);
+      // Push to Shiprocket
+      shiprocket.createOrder(order)
+        .then(async sr => {
+          order.shiprocket = {
+            orderId:    sr.order_id,
+            shipmentId: sr.shipment_id,
+            status:     sr.status
+          };
+          order.orderStatus = 'processing';
+          await order.save();
+        }).catch(e => console.error('Shiprocket error:', e.message));
 
-    res.json({
-      success:  true,
-      orderId:  order.orderId,
-      message:  'Payment confirmed! Your order is being prepared.'
-    });
+      return res.redirect(`${process.env.FRONTEND_URL}/order-confirmed.html?order=${order.orderId}`);
+
+    } else {
+      order.paymentStatus = 'failed';
+      await order.save();
+      return res.redirect(`${process.env.FRONTEND_URL}/payment-failed.html?order=${order.orderId}`);
+    }
 
   } catch (err) {
-    console.error('Verify error:', err);
-    res.status(500).json({ error: 'Verification failed. Contact support.' });
+    console.error('Callback error:', err?.response?.data || err.message);
+    res.redirect(`${process.env.FRONTEND_URL}/payment-failed.html`);
+  }
+});
+
+// ── GET /api/payment/status/:txnId ────────────────────────────────────
+router.get('/status/:txnId', async (req, res) => {
+  try {
+    const { txnId } = req.params;
+    const checksum  = makeStatusChecksum(txnId);
+    const response  = await axios.get(
+      `${STATUS_URL}/${MERCHANT_ID}/${txnId}`,
+      {
+        headers: {
+          'Content-Type':  'application/json',
+          'X-VERIFY':      checksum,
+          'X-MERCHANT-ID': MERCHANT_ID
+        }
+      }
+    );
+    res.json(response.data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
 // ── POST /api/payment/cod-order ───────────────────────────────────────
-// Cash on Delivery — no payment step
 router.post('/cod-order', async (req, res) => {
   try {
     const { cartItems, customer, subtotal, shippingCharge, discount, total, couponCode } = req.body;
-
     if (!customer?.email) return res.status(400).json({ error: 'Customer details required' });
 
     const order = new Order({
-      customer, items: cartItems,
-      subtotal, shippingCharge: shippingCharge || 0,
-      discount: discount || 0, total,
-      couponCode,
+      customer, items: cartItems, subtotal,
+      shippingCharge: shippingCharge || 0,
+      discount: discount || 0, total, couponCode,
       paymentMethod: 'cod',
-      paymentStatus: 'pending',  // COD — paid on delivery
+      paymentStatus: 'pending',
       orderStatus:   'confirmed'
     });
     await order.save();
 
-    // Create in Shiprocket
-    shiprocket.createOrder(order).then(async (srRes) => {
-      order.shiprocket = { orderId: srRes.order_id, shipmentId: srRes.shipment_id };
-      order.orderStatus = 'processing';
-      await order.save();
-    }).catch(err => console.error('Shiprocket COD failed:', err.message));
-
-    sendOrderConfirmation(order);
+    shiprocket.createOrder(order)
+      .then(async sr => {
+        order.shiprocket = { orderId: sr.order_id, shipmentId: sr.shipment_id };
+        order.orderStatus = 'processing';
+        await order.save();
+      }).catch(e => console.error('Shiprocket COD error:', e.message));
 
     res.json({ success: true, orderId: order.orderId });
 
   } catch (err) {
-    console.error('COD order error:', err);
+    console.error('COD error:', err);
     res.status(500).json({ error: 'Could not place order. Please try again.' });
   }
 });
 
-// ── GET /api/payment/check-serviceability ────────────────────────────
+// ── GET /api/payment/check-serviceability ─────────────────────────────
 router.get('/check-serviceability', async (req, res) => {
   try {
     const { pincode, weight = 0.3, cod = false } = req.query;
-    const YOUR_PICKUP_PINCODE = '110001'; // ← Replace with your pickup/warehouse pincode
-
-    const data = await shiprocket.checkServiceability(YOUR_PICKUP_PINCODE, pincode, weight, cod);
-
-    // Return simplified list of available couriers + cheapest rate
+    const pickupPin = process.env.PICKUP_PINCODE || '422001';
+    const data = await shiprocket.checkServiceability(pickupPin, pincode, weight, cod);
     const couriers = data?.data?.available_courier_companies || [];
     const cheapest = couriers.sort((a, b) => a.rate - b.rate)[0];
-
     res.json({
-      serviceable: couriers.length > 0,
-      couriers:    couriers.length,
-      cheapestRate: cheapest?.rate || 0,
+      serviceable:   couriers.length > 0,
+      cheapestRate:  cheapest?.rate || 0,
       estimatedDays: cheapest?.estimated_delivery_days || 'N/A'
     });
-  } catch (err) {
-    res.json({ serviceable: true, cheapestRate: 60 }); // fallback
+  } catch {
+    res.json({ serviceable: true, cheapestRate: 60 });
   }
 });
 

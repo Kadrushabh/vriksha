@@ -23,56 +23,47 @@ const addressSchema = new mongoose.Schema({
 
 const orderSchema = new mongoose.Schema({
   orderId: {
-    type: String,
-    unique: true,
+    type:    String,
+    unique:  true,
     default: () => `VRK-${Date.now()}-${Math.floor(Math.random() * 1000)}`
   },
+  customer:       addressSchema,
+  items:          [orderItemSchema],
+  subtotal:       { type: Number, required: true },
+  shippingCharge: { type: Number, default: 0 },
+  discount:       { type: Number, default: 0 },
+  total:          { type: Number, required: true },
+  couponCode:     { type: String },
 
-  customer: addressSchema,
-
-  items:         [orderItemSchema],
-  subtotal:      { type: Number, required: true },
-  shippingCharge:{ type: Number, default: 0 },
-  discount:      { type: Number, default: 0 },
-  total:         { type: Number, required: true },
-
-  couponCode:    { type: String },
-
-  // Payment
   paymentMethod: {
-    type: String,
-    enum: ['prepaid', 'cod'],
-    default: 'prepaid'
+    type: String, enum: ['prepaid', 'cod'], default: 'prepaid'
   },
   paymentStatus: {
-    type: String,
-    enum: ['pending', 'completed', 'failed', 'refunded'],
-    default: 'pending'
+    type: String, enum: ['pending', 'completed', 'failed', 'refunded'], default: 'pending'
   },
-  razorpayOrderId:   { type: String },
-  razorpayPaymentId: { type: String },
 
-  // Shipping
+  // Stores PhonePe transaction ID
+  phonepeTransactionId: { type: String },
+  phonepePaymentId:     { type: String },
+
   orderStatus: {
     type: String,
-    enum: ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'returned'],
+    enum: ['pending','confirmed','processing','shipped','delivered','cancelled','returned'],
     default: 'pending'
   },
+
   shiprocket: {
-    orderId:    { type: String },
-    shipmentId: { type: String },
-    awbCode:    { type: String },
-    courierId:  { type: String },
-    courierName:{ type: String },
-    trackingUrl:{ type: String },
-    status:     { type: String }
+    orderId:     { type: String },
+    shipmentId:  { type: String },
+    awbCode:     { type: String },
+    courierName: { type: String },
+    trackingUrl: { type: String },
+    status:      { type: String }
   },
 
-  notes:          { type: String },
-  adminNotes:     { type: String },
-
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
+  adminNotes: { type: String },
+  createdAt:  { type: Date, default: Date.now },
+  updatedAt:  { type: Date, default: Date.now }
 });
 
 orderSchema.pre('save', function(next) {
@@ -80,10 +71,10 @@ orderSchema.pre('save', function(next) {
   next();
 });
 
-// Indexes for fast admin queries
 orderSchema.index({ orderId: 1 });
 orderSchema.index({ 'customer.email': 1 });
 orderSchema.index({ orderStatus: 1 });
 orderSchema.index({ createdAt: -1 });
+orderSchema.index({ phonepeTransactionId: 1 });
 
 module.exports = mongoose.model('Order', orderSchema);
