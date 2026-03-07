@@ -18,7 +18,7 @@ const PORT = process.env.PORT || 3000;
 // ── Security ──────────────────────────────────────────────────────────
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({
-  origin: ['https://vriksha.in', 'https://www.vriksha.in', 'http://localhost:3000'],
+  origin: ['https://omengtech.com', 'https://omengtech.com', 'http://localhost:3000'],
   credentials: true
 }));
 
