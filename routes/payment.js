@@ -35,7 +35,13 @@ router.post('/initiate', async (req, res) => {
     // Save order to DB
     const order = new Order({
       customer,
-      items: cartItems,
+      items: cartItems.map(i => ({
+        productId:  i.id || i.productId || 'unknown',
+        name:       i.name,
+        price:      Number(i.price),
+        quantity:   Number(i.quantity),
+        totalPrice: Number(i.price) * Number(i.quantity)
+      })),
       subtotal,
       shippingCharge: shippingCharge || 0,
       discount:       discount || 0,
@@ -59,8 +65,13 @@ router.post('/initiate', async (req, res) => {
     });
 
   } catch (err) {
-    console.error('Razorpay initiate error:', JSON.stringify(err?.error || err?.response?.data || err.message));
-    res.status(500).json({ error: 'Payment initiation failed. Please try again.' });
+    const errDetail = err?.error || err?.response?.data || err?.message || err;
+    console.error('Razorpay initiate error FULL:', JSON.stringify(errDetail));
+    console.error('Razorpay status code:', err?.statusCode);
+    res.status(500).json({ 
+      error: 'Payment initiation failed. Please try again.',
+      debug: errDetail  // temporary - remove after fixing
+    });
   }
 });
 
@@ -113,7 +124,13 @@ router.post('/cod-order', async (req, res) => {
 
     const order = new Order({
       customer,
-      items:          cartItems,
+      items: cartItems.map(i => ({
+        productId:  i.id || i.productId || 'unknown',
+        name:       i.name,
+        price:      Number(i.price),
+        quantity:   Number(i.quantity),
+        totalPrice: Number(i.price) * Number(i.quantity)
+      })),
       subtotal,
       shippingCharge: shippingCharge || 0,
       discount:       discount || 0,
