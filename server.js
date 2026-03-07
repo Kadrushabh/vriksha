@@ -78,6 +78,22 @@ app.get('/admin/*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public/admin/index.html'));
 });
 
+// ── Debug: confirm deployment version & check recent orders ──────────
+app.get('/debug-orders', async (req, res) => {
+  try {
+    const Order = require('./models/Order');
+    const recent = await Order.find().sort({ createdAt: -1 }).limit(5)
+      .select('orderId razorpayOrderId razorpayPaymentId paymentStatus orderStatus createdAt');
+    res.json({
+      deployedAt: new Date().toISOString(),
+      schemaHasRazorpayOrderId: true,
+      recentOrders: recent
+    });
+  } catch(e) {
+    res.json({ error: e.message });
+  }
+});
+
 // ── 404 ───────────────────────────────────────────────────────────────
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
 
