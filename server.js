@@ -15,6 +15,8 @@ const adminRoutes   = require('./routes/admin');
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
+app.set('trust proxy', 1);   // ✅ ADD THIS LINE
+
 // ── CORS — must be FIRST before everything else ───────────────────────
 const corsOptions = {
   origin: ['https://vriksha.store', 'https://www.vriksha.store', 'http://localhost:3000'],
