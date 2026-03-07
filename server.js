@@ -64,6 +64,15 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', brand: 'Vriksha', time: new Date().toISOString() });
 });
 
+app.get('/test-razorpay', (req, res) => {
+  try {
+    const Razorpay = require('razorpay');
+    res.json({ status: 'razorpay loaded', version: require('razorpay/package.json').version });
+  } catch(e) {
+    res.json({ status: 'razorpay NOT found', error: e.message });
+  }
+});
+
 // ── Admin SPA fallback ────────────────────────────────────────────────
 app.get('/admin/*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public/admin/index.html'));
