@@ -60,6 +60,20 @@ app.use('/api/payment', paymentRoutes);
 app.use('/api/admin',   adminRoutes);
 
 // ── Health check ──────────────────────────────────────────────────────
+// TEMP: Test Shiprocket auth directly
+app.get('/test-shiprocket', async (req, res) => {
+  const axios = require('axios');
+  try {
+    const r = await axios.post('https://apiv2.shiprocket.in/v1/external/auth/login', {
+      email:    process.env.SHIPROCKET_EMAIL,
+      password: process.env.SHIPROCKET_PASSWORD
+    });
+    res.json({ success: true, email: process.env.SHIPROCKET_EMAIL, token_preview: r.data.token?.substring(0,20) + '...' });
+  } catch(e) {
+    res.json({ success: false, email: process.env.SHIPROCKET_EMAIL, error: e?.response?.data || e.message });
+  }
+});
+
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', brand: 'Vriksha', time: new Date().toISOString() });
 });
@@ -76,22 +90,6 @@ app.get('/test-razorpay', (req, res) => {
 // ── Admin SPA fallback ────────────────────────────────────────────────
 app.get('/admin/*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public/admin/index.html'));
-});
-
-// ── Debug: confirm deployment version & check recent orders ──────────
-app.get('/debug-orders', async (req, res) => {
-  try {
-    const Order = require('./models/Order');
-    const recent = await Order.find().sort({ createdAt: -1 }).limit(5)
-      .select('orderId razorpayOrderId razorpayPaymentId paymentStatus orderStatus createdAt');
-    res.json({
-      deployedAt: new Date().toISOString(),
-      schemaHasRazorpayOrderId: true,
-      recentOrders: recent
-    });
-  } catch(e) {
-    res.json({ error: e.message });
-  }
 });
 
 // ── 404 ───────────────────────────────────────────────────────────────
