@@ -11,6 +11,7 @@ const path      = require('path');
 
 const paymentRoutes = require('./routes/payment');
 const adminRoutes   = require('./routes/admin');
+const authRoutes    = require('./routes/auth');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -58,6 +59,7 @@ app.use('/admin', express.static(path.join(__dirname, 'public/admin')));
 // ── Routes ────────────────────────────────────────────────────────────
 app.use('/api/payment', paymentRoutes);
 app.use('/api/admin',   adminRoutes);
+app.use('/api/auth',    authRoutes);
 
 // ── Health check ──────────────────────────────────────────────────────
 // TEMP: Test Shiprocket auth directly
