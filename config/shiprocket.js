@@ -25,7 +25,7 @@ async function createOrder(order) {
   const payload = {
     order_id:                  order.orderId,
     order_date:                new Date().toISOString().split('T')[0],
-    pickup_location:           'Primary',
+    pickup_location:           process.env.SHIPROCKET_PICKUP_LOCATION || 'Nashik office',
     billing_customer_name:     order.customer.firstName,
     billing_last_name:         order.customer.lastName,
     billing_address:           order.customer.address,
