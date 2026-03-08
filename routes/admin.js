@@ -104,7 +104,11 @@ router.post('/orders/:orderId/shiprocket-sync', async (req, res) => {
     if (!order) return res.status(404).json({ error: 'Order not found' });
 
     const srRes = await shiprocket.createOrder(order);
-    order.shiprocket = { orderId: srRes.order_id, shipmentId: srRes.shipment_id, status: srRes.status };
+    console.log('SR full response:', JSON.stringify(srRes));
+    const srOrderId = srRes.order_id || srRes.payload?.order_id;
+    const srShipId  = srRes.shipment_id || srRes.payload?.shipment_id;
+    const srStatus  = srRes.status || srRes.payload?.status;
+    order.shiprocket = { orderId: srOrderId, shipmentId: srShipId, status: srStatus };
     order.orderStatus = 'processing';
     await order.save();
 
