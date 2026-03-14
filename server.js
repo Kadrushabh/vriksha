@@ -41,15 +41,21 @@ app.use(rateLimit({
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// ── Sessions ──────────────────────────────────────────────────────────
+// ── Sessions (MongoDB-backed — survives Railway restarts) ─────────────
+const MongoStore = require('connect-mongo');
 app.use(session({
   secret:            process.env.SESSION_SECRET || 'vriksha-secret-2026',
   resave:            false,
   saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: process.env.MONGODB_URI,
+    ttl:      30 * 24 * 60 * 60
+  }),
   cookie: {
     secure:   process.env.NODE_ENV === 'production',
     httpOnly: true,
-    maxAge:   8 * 60 * 60 * 1000
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    maxAge:   30 * 24 * 60 * 60 * 1000
   }
 }));
 
